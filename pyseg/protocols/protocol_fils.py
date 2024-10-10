@@ -81,10 +81,10 @@ class ProtPySegFils(EMProtocol, ProtTomoBase, ProtTomoImportAcquisition):
     """filter a MbGraphMCF (Mean Cumulative Function) object by extracting a filament network"""
 
     _label = 'fils'
+    stepsExecutionMode = STEPS_PARALLEL
 
     def __init__(self,  **kwargs):
         super().__init__(**kwargs)
-        self.stepsExecutionMode = STEPS_PARALLEL
         self._xmlSources = None
         self._xmlTargets = None
         self._inStarDir = None
@@ -212,7 +212,7 @@ class ProtPySegFils(EMProtocol, ProtTomoBase, ProtTomoImportAcquisition):
     def _insertAllSteps(self):
         inStarDict = self._initialize()
         for starFile, outDir in inStarDict.items():
-            self._insertFunctionStep(self.pysegFils, starFile, outDir, prerequisites=[])
+            self._insertFunctionStep(self.pysegFils, starFile, outDir, prerequisites=[],needsGPU=False)
 
     def _initialize(self):
         outDir = self._getExtraPath()

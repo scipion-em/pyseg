@@ -1,3 +1,8 @@
+v3.1.4:
+  Users:
+   - Steps more precise in GPU usage. Improved execution
+  Developers:
+   - executionmode at class level
 v3.1.3:
     - fix gcc detection
     - fix reading segmentation txt files
