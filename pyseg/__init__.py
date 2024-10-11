@@ -37,7 +37,7 @@ from pyseg.constants import (PYSEG_HOME, PYSEG, PYSEG_SOURCE_URL, PYSEG_ENV_ACTI
 
 _logo = "icon.png"
 _references = ['MartinezSanchez2020']
-__version__ = '3.1.3'
+__version__ = '3.1.4'
 
 
 class Plugin(pwem.Plugin):
