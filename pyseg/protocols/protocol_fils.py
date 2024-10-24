@@ -212,7 +212,9 @@ class ProtPySegFils(EMProtocol, ProtTomoBase, ProtTomoImportAcquisition):
     def _insertAllSteps(self):
         inStarDict = self._initialize()
         for starFile, outDir in inStarDict.items():
-            self._insertFunctionStep(self.pysegFils, starFile, outDir, prerequisites=[],needsGPU=False)
+            self._insertFunctionStep(self.pysegFils, starFile, outDir,
+                                     prerequisites=[],
+                                     needsGPU=False)
 
     def _initialize(self):
         outDir = self._getExtraPath()

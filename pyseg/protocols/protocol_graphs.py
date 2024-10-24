@@ -24,28 +24,33 @@
 # *  e-mail address 'scipion@cnb.csic.es'
 # *
 # **************************************************************************
+import logging
 import shutil
 from glob import glob
 from os.path import basename
+from emtable import Table
 from pwem.protocols import EMProtocol
 from pyseg.convert.convert import splitPysegStarFile
-from pyseg.protocols.protocol_pre_seg import outputObjects as presegOutputObjects
-
+from pyseg.protocols.protocol_pre_seg import outputObjects as presegOutputObjects, ProtPySegPreSegParticles
+from pyworkflow.protocol.constants import STEPS_PARALLEL
 from pyseg.utils import createStarDirectories, genOutSplitStarFileName
 from pyworkflow.protocol import FloatParam, PointerParam, LEVEL_ADVANCED, BooleanParam, IntParam
 from pyworkflow.utils import Message, moveFile
 from scipion.constants import PYTHON
+from tomo.objects import SetOfTomoMasks
 from tomo.protocols import ProtTomoBase
 from tomo.protocols.protocol_base import ProtTomoImportAcquisition
-
 from pyseg import Plugin
-from pyseg.constants import GRAPHS_SCRIPT
+from pyseg.constants import GRAPHS_SCRIPT, SEGMENTATION
+
+logger = logging.getLogger(__name__)
 
 
 class ProtPySegGraphs(EMProtocol, ProtTomoBase, ProtTomoImportAcquisition):
     """analyze a GraphMCF (Mean Cumulative Function) from a segmented membrane"""
 
     _label = 'graphs'
+    stepsExecutionMode = STEPS_PARALLEL
 
     # -------------------------- DEFINE param functions ----------------------
     def __init__(self, **kwargs):
@@ -62,7 +67,7 @@ class ProtPySegGraphs(EMProtocol, ProtTomoBase, ProtTomoImportAcquisition):
         # You need a params to belong to a section:
         form.addSection(label=Message.LABEL_INPUT)
         form.addParam('inSegProt', PointerParam,
-                      pointerClass='ProtPySegPreSegParticles',
+                      pointerClass='ProtPySegPreSegParticles, SetOfTomoMasks',
                       label='Pre segmentation',
                       important=True,
                       allowsNull=False,
@@ -107,19 +112,36 @@ class ProtPySegGraphs(EMProtocol, ProtTomoBase, ProtTomoImportAcquisition):
                        label='Maximum distance to membrane (Å)',
                        allowsNull=False,
                        help='Maximum euclidean distance to membrane in Å.')
+        form.addParam('binThreads', IntParam,
+                      label='PySeg threads',
+                      default=2,
+                      help='Number of threads used by EMAN each time it is called in the protocol execution. For '
+                           'example, if 2 Scipion threads and 3 PySeg threads are set, the tomograms will be '
+                           'processed in groups of 2 at the same time with a call of PySeg with 3 threads each, so '
+                           '6 threads will be used at the same time. Beware the memory of your machine has '
+                           'memory enough to load together the number of tomograms specified by Scipion threads.')
         form.addParallelSection(threads=4, mpi=0)
 
     def _insertAllSteps(self):
         self._initialize()
+        stepIdList = []
         for starFile in self.starFileList:
-            self._insertFunctionStep(self.pysegGraphs, starFile)
-        self._insertFunctionStep(self.removeUnusedFilesStep)
+            stepId = self._insertFunctionStep(self.pysegGraphs, starFile,
+                                              prerequisites=[],
+                                              needsGPU=False)
+            stepIdList.append(stepId)
+        self._insertFunctionStep(self.removeUnusedFilesStep,
+                                 prerequisites=stepIdList,
+                                 needsGPU=False)
 
     def _initialize(self):
         # Generate directories for input and output star files
         # Split the input file into n (threads) files
+        inStar = self._getPreSegStarFile()
         self._outStarDir, self._inStarDir = createStarDirectories(self._getExtraPath())
-        self.starFileList = splitPysegStarFile(self._getPreSegStarFile(), self._inStarDir, j=self.vesiclePkgSize.get())
+        subsetStarFile = self._manageInStarFile(inStar)
+        inStar = subsetStarFile if subsetStarFile else inStar
+        self.starFileList = splitPysegStarFile(inStar, self._inStarDir, j=self.vesiclePkgSize.get())
 
     def pysegGraphs(self, starFile):
         # Script called
@@ -146,17 +168,47 @@ class ProtPySegGraphs(EMProtocol, ProtTomoBase, ProtTomoImportAcquisition):
         graphsCmd += '%s ' % Plugin.getHome(GRAPHS_SCRIPT)
         graphsCmd += '--inStar %s ' % starFile
         graphsCmd += '--outDir %s ' % self._getExtraPath()
-        graphsCmd += '--pixelSize %s ' % (self._getSamplingRate()/10)  # PySeg requires it in nm
+        graphsCmd += '--pixelSize %s ' % (self._getSamplingRate() / 10)  # PySeg requires it in nm
         graphsCmd += '--sSig %s ' % self.sSig.get()
         graphsCmd += '--vDen %s ' % self.vDen.get()
         graphsCmd += '--veRatio %s ' % self.vRatio.get()
-        graphsCmd += '--maxLen %s ' % (self.maxLen.get()/10)  # PySeg requires it in nm
-        graphsCmd += '-j %s ' % self.numberOfThreads.get()
+        graphsCmd += '--maxLen %s ' % (self.maxLen.get() / 10)  # PySeg requires it in nm
+        graphsCmd += '-j %s ' % self.binThreads.get()
         return graphsCmd
 
     def _getPreSegStarFile(self):
-        return self.inSegProt.get().getPresegOutputFile(self.inSegProt.get().getVesiclesCenteredStarFile())
+        inputObj = self.inSegProt.get()
+        if type(inputObj) is ProtPySegPreSegParticles:
+            return inputObj.getPresegOutputFile(inputObj.getVesiclesCenteredStarFile())
+        else:
+            # Set of TomoMasks
+            return inputObj._pysegPresegVesicleCStar.get()
 
     def _getSamplingRate(self):
-        inVesicles = getattr(self.inSegProt.get(), presegOutputObjects.vesicles.name)
-        return inVesicles.getSamplingRate()
+        inputObj = self.inSegProt.get()
+        if type(inputObj) is ProtPySegPreSegParticles:
+            inVesicles = getattr(inputObj, presegOutputObjects.vesicles.name)
+            return inVesicles.getSamplingRate()
+        else:
+            return inputObj.getSamplingRate()
+
+    def _manageInStarFile(self, inStar):
+        """Since the graphs protocol admits a set of tomo masks, there may have been subset actions in between. In
+        that case, a new star file containing only the present masked vesicles (tomo masks) must be generated.
+        """
+        outStarFile = ''
+        inObj = self.inSegProt.get()
+        if type(inObj) is SetOfTomoMasks:
+            tomoTable = Table()
+            tomoTable.read(inStar)
+            if len(tomoTable) != len(inObj):
+                outStarFile = self._getExtraPath('inSegVesicles.star')
+                labels = tomoTable.getColumnNames()
+                outTable = Table(columns=labels)
+                tableSegVesicleFileDict = {row.get(SEGMENTATION): i for i, row in enumerate(tomoTable)}
+                logger.info('==> Subset detected. Writing a new star file with the selected sefmented vesicles.')
+                for segVesicle in inObj:
+                    matchRowInd = tableSegVesicleFileDict[segVesicle.getFileName()]
+                    outTable._rows.append(tomoTable[matchRowInd])
+                    outTable.write(outStarFile)
+        return outStarFile

@@ -33,7 +33,7 @@ from pyseg.convert import readPysegCoordinates
 from pyworkflow.protocol import FloatParam, EnumParam, PointerParam, IntParam, LEVEL_ADVANCED, STEPS_PARALLEL
 from pyworkflow.utils import Message, removeBaseExt, copyFile, moveFile
 from scipion.constants import PYTHON
-from tomo.objects import SetOfCoordinates3D, SetOfTomograms
+from tomo.objects import SetOfCoordinates3D, SetOfTomograms, SetOfTomoMasks
 from tomo.protocols import ProtTomoBase
 from tomo.protocols.protocol_base import ProtTomoImportAcquisition
 from pyseg import Plugin
@@ -60,11 +60,11 @@ class ProtPySegPicking(EMProtocol, ProtTomoBase, ProtTomoImportAcquisition):
     """extract particles from a filament network of a oriented single membrane graph"""
 
     _label = 'picking'
+    stepsExecutionMode = STEPS_PARALLEL
 
     def __init__(self,  **kwargs):
         super().__init__(**kwargs)
         self._tomoSet = None
-        self.stepsExecutionMode = STEPS_PARALLEL
         self.tomoSet = None
         self.acquisitionParams = {
                 'angleMin': 90,
@@ -152,9 +152,13 @@ class ProtPySegPicking(EMProtocol, ProtTomoBase, ProtTomoImportAcquisition):
         allOutputId = []
         starFileList = self._convertInputStep()
         for starFile in starFileList:
-            pId = self._insertFunctionStep(self.pysegPicking, starFile, prerequisites=[])
+            pId = self._insertFunctionStep(self.pysegPicking, starFile,
+                                           prerequisites=[],
+                                           needsGPU=False)
             allOutputId.append(pId)
-        self._insertFunctionStep(self.createOutputStep, prerequisites=allOutputId)
+        self._insertFunctionStep(self.createOutputStep,
+                                 prerequisites=allOutputId,
+                                 needsGPU=False)
 
     def _convertInputStep(self):
         outDir = self._getExtraPath()
@@ -265,6 +269,7 @@ class ProtPySegPicking(EMProtocol, ProtTomoBase, ProtTomoImportAcquisition):
     def _getTomoFromRelations(self):
         # Get the tomograms climbing from this point of the workflow until the pre-seg and if there aren't tomograms
         # at that point, use the relations to go to the corresponding tomograms
-        presegProt = self.inFilsProt.get().inGraphsProt.get().inSegProt.get()
-        tomoSet = getObjFromRelation(presegProt.inTomoMasks.get(), self, SetOfTomograms)
+        inObj = self.inFilsProt.get().inGraphsProt.get().inSegProt.get()
+        tomoMaks = inObj if type(inObj) is SetOfTomoMasks else inObj.inTomoMasks.get()
+        tomoSet = getObjFromRelation(tomoMaks, self, SetOfTomograms)
         return tomoSet

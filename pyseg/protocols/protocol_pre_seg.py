@@ -25,13 +25,19 @@
 # *
 # **************************************************************************
 import glob
+import logging
 from enum import Enum
-from os.path import abspath
+from os.path import abspath, exists
+
+import mrcfile
+
 from pwem.convert.headers import fixVolume
 from pwem.emlib.image import ImageHandler
 from pwem.protocols import EMProtocol
 from pyseg.convert.convert import getVesicleIdFromSubtomoName
-from pyworkflow.protocol import NumericListParam, IntParam, FloatParam, GT, LEVEL_ADVANCED, PointerParam
+
+from pyworkflow.object import String
+from pyworkflow.protocol import IntParam, FloatParam, GT, LEVEL_ADVANCED, PointerParam, STEPS_PARALLEL
 from pyworkflow.utils import Message, removeBaseExt, removeExt
 from scipion.constants import PYTHON
 from tomo.objects import SetOfTomoMasks, TomoMask, SetOfSubTomograms, SubTomogram, SetOfTomograms, Tomogram
@@ -41,8 +47,10 @@ from pyseg.constants import PRESEG_SCRIPT, TOMOGRAM, PYSEG_LABEL, VESICLE, NOT_F
     RLN_ORIGIN_Z
 from relion.convert import Table
 import numpy as np
-
 from tomo.utils import getObjFromRelation
+
+
+logger = logging.getLogger(__name__)
 
 
 class outputObjects(Enum):
@@ -187,13 +195,19 @@ class ProtPySegPreSegParticles(EMProtocol):
     def _getMaterialsList(vesicle):
         # Get annotated materials from txt file and add one line for each one
         materialsFile = removeExt(vesicle) + '.txt'
-        with open(materialsFile) as matFile:
-            materialsList = matFile.read()
-
-        # Expected format is a string like 'ind1,ind2,...,indn\n, so it's necessary to transform it into a list of
-        # material indices, which may have been annotated more than once (incomplete membranes that were annotated part
-        # by part)
-        return set(materialsList.replace('\n', '').split(','))
+        if exists(materialsFile):  # Segmentations come from the Membrane Annotator app
+            logger.info(f'==> Found material list file for current vesicle: {materialsFile}')
+            with open(materialsFile) as matFile:
+                materialsList = matFile.read()
+                # Expected format is a string like 'ind1,ind2,...,indn\n, so it's necessary to transform it into
+                # a list of material indices, which may have been annotated more than once (incomplete membranes
+                # that were annotated part by part)
+                return set(materialsList.replace('\n', '').split(','))
+        else:
+            with mrcfile.mmap(vesicle) as mrc:
+                materialIndices = sorted(np.unique(mrc.data))
+                logger.info(f'==> Material list file not found. Simutating it. Indices found are {materialIndices}')
+                return materialIndices
 
     def _findVesicleCenter(self, starFileInit, starFilePreseg1):
         ih = ImageHandler()
@@ -278,6 +292,7 @@ class ProtPySegPreSegParticles(EMProtocol):
         sRate = self._getSamplingRate()
         inTomoMaskSet = self.inTomoMasks.get()
         tomoMaskSet.copyInfo(inTomoMaskSet)
+        tomoMaskSet._pysegPresegVesicleCStar = String(self.getPresegOutputFile(self.getVesiclesCenteredStarFile()))
         subTomoSet.copyInfo(inTomoMaskSet)
 
         counter = 1

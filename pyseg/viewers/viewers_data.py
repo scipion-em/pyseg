@@ -29,7 +29,7 @@ import pwem.viewers.views as vi
 
 from .vesicle_graphs_fils_viewer import VesicleViewerDialog, FROM_GRAPHS, FROM_FILS, FROM_PICKING
 from .vesicle_visualization_tree import VesicleViewerProvider
-from ..protocols import ProtPySegGraphs, ProtPySegFils, ProtPySegPicking
+from ..protocols import ProtPySegGraphs, ProtPySegFils, ProtPySegPicking, ProtPySegPreSegParticles
 
 
 class TomoViz4PysegDataViewer(pwviewer.Viewer):
@@ -55,27 +55,36 @@ class TomoViz4PysegDataViewer(pwviewer.Viewer):
         views = []
         vesicleSubTomos = []
         cls = type(obj)
+        areTomoMasks = False
         if hasattr(obj, 'inSegProt'):  # Accessing from graphs
             vtiPath = obj._getExtraPath()
-            vesicleSubTomos = obj.inSegProt.get().vesicles
+            inObj = obj.inSegProt.get()
+            if type(inObj) is ProtPySegPreSegParticles:
+                vesicleSubTomos = inObj.vesicles
+            else:
+                vesicleSubTomos = inObj
+                areTomoMasks = True
         elif hasattr(obj, 'inGraphsProt'):  # Accessing from fils
             vtiPath = obj.inGraphsProt.get()._getExtraPath()
-            vesicleSubTomos = obj.inGraphsProt.get().inSegProt.get().vesicles
+            inObj = obj.inGraphsProt.get().inSegProt.get()
+            if type(inObj) is ProtPySegPreSegParticles:
+                vesicleSubTomos = inObj.vesicles
+            else:
+                vesicleSubTomos = inObj
+                areTomoMasks = True
         elif hasattr(obj, 'inFilsProt'):  # Accessing from picking
             vtiPath = obj.inFilsProt.get().inGraphsProt.get()._getExtraPath()
             vesicleSubTomos = obj.inFilsProt.get().inGraphsProt.get().inSegProt.get().vesicles
 
-        vesicleList = [vesicle.clone() for vesicle in vesicleSubTomos.iterItems()]
-        vesicleProvider = VesicleViewerProvider(vesicleList, None, None)
+        vesicleFileList = [vesicle.clone() for vesicle in vesicleSubTomos.iterItems()]
+        vesicleProvider = VesicleViewerProvider(vesicleFileList, None, None, areTomoMasks=areTomoMasks)
 
         if issubclass(cls, ProtPySegGraphs):
-            VesicleViewerDialog(self._tkRoot, vtiPath=vtiPath, provider=vesicleProvider,
-                                source=FROM_GRAPHS, prot=obj)
+            source = FROM_GRAPHS
         elif issubclass(cls, ProtPySegFils):
-            VesicleViewerDialog(self._tkRoot, vtiPath=vtiPath, provider=vesicleProvider,
-                                source=FROM_FILS, prot=obj)
+            source = FROM_FILS
         elif issubclass(cls, ProtPySegPicking):
-            VesicleViewerDialog(self._tkRoot, vtiPath=vtiPath, provider=vesicleProvider,
-                                source=FROM_PICKING, prot=obj)
-
+            source = FROM_PICKING
+        VesicleViewerDialog(self._tkRoot, vtiPath=vtiPath, provider=vesicleProvider,
+                            source=source, prot=obj, lockGui=False, areTomoMasks=areTomoMasks)
         return views

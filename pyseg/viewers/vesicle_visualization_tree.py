@@ -32,8 +32,13 @@ from tomo.viewers.views_tkinter_tree import TomogramsTreeProvider
 
 class VesicleViewerProvider(TomogramsTreeProvider):
 
+    def __init__(self, tomoList, path, mode, areTomoMasks=False):
+        super().__init__(tomoList, path, mode)
+        self.areTomoMasks = areTomoMasks
+
     def getObjectInfo(self, inVesicle):
-        vesicleName = removeBaseExt(inVesicle.getFileName())
+        fileName = inVesicle.getVolName() if self.areTomoMasks else inVesicle.getFileName()
+        vesicleName = removeBaseExt(fileName)
         return {'key': vesicleName, 'parent': None}
 
     def getColumns(self):

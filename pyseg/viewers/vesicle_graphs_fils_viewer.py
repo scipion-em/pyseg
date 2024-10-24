@@ -42,11 +42,12 @@ class VesicleViewerDialog(ToolbarListDialog):
     This class allows to  call a MembraneAnnotator subprocess from a list of Tomograms.
     """
 
-    def __init__(self, parent, vtiPath, **kwargs):
+    def __init__(self, parent, vtiPath, areTomoMasks=False, **kwargs):
         self.vtiPath = vtiPath
         self.provider = kwargs.get("provider", None)
         self.prot = kwargs.get('prot', None)
         self.source = kwargs.get('source', None)
+        self.areTomoMasks = areTomoMasks
         ToolbarListDialog.__init__(self, parent,
                                    "Vesicle Visualization Object Manager",
                                    allowsEmptySelection=False,
@@ -54,9 +55,10 @@ class VesicleViewerDialog(ToolbarListDialog):
                                    allowSelect=False,
                                    **kwargs)
 
-    def launchVesicleViewer(self, vesicle):
+    def launchVesicleViewer(self, inVesicle):
         print("\n==> Running Vesicle Viewer:")
-        vesicleBaseName = removeBaseExt(vesicle.getFileName())
+        fileName = inVesicle.getVolName() if self.areTomoMasks else inVesicle.getFileName()
+        vesicleBaseName = removeBaseExt(fileName)
         vtiName = join(self.vtiPath, vesicleBaseName + '.vti')
         args = {'vti_file': vtiName}
         if self.source == FROM_GRAPHS:
