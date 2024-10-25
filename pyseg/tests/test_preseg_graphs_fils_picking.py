@@ -163,6 +163,8 @@ class TestFromPresegToPicking(BaseTest):
             inSegProt=cls.protPreseg,
             vesiclePkgSize=cls.vesiclesPackagesSize,
             maxLen=330,
+            binThreads=cls.nVesicles,
+            numberOfThreads=1
         )
 
         protGraphs.setObjLabel('Graphs')
