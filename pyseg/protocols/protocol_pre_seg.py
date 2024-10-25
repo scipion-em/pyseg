@@ -37,7 +37,7 @@ from pwem.emlib.image import ImageHandler
 from pwem.protocols import EMProtocol
 from pyseg.convert.convert import getVesicleIdFromSubtomoName
 
-from pyworkflow.object import String, Integer
+from pyworkflow.object import String
 from pyworkflow.protocol import IntParam, FloatParam, GT, LEVEL_ADVANCED, PointerParam
 from pyworkflow.utils import Message, removeBaseExt, removeExt
 from scipion.constants import PYTHON
@@ -53,7 +53,6 @@ from tomo.utils import getObjFromRelation
 
 logger = logging.getLogger(__name__)
 PRE_STAR_SUFFIX = '_pre.star'
-N_SEGS_REMOVED = '_nSegmentationsRemoved'
 
 
 class outputObjects(Enum):
@@ -160,7 +159,7 @@ class ProtPySegPreSegParticles(EMProtocol):
         outputTable.write(self._starFile)
 
     def pysegPreSegStep(self):
-        outDir = self._getExtraPath()
+        outDir = self._getTmpPath()
         # Script called
         Plugin.runPySeg(self, PYTHON, self._getPreSegCmd(self._starFile, outDir))
 
@@ -189,11 +188,6 @@ class ProtPySegPreSegParticles(EMProtocol):
             valMsg.append('Unable to get trough the relations the tomograms corresponding to the introduced tomomasks')
         return valMsg
 
-    def _summary(self):
-        msgs = []
-        nSegmentationsRemoved = getattr(self, N_SEGS_REMOVED, None)
-        if nSegmentationsRemoved:
-            msgs.append(f'Number of segmentations removed by size filtering was {nSegmentationsRemoved}')
     # --------------------------- UTIL functions -----------------------------------
 
     def _getPreSegCmd(self, inStar, outDir):
@@ -230,6 +224,8 @@ class ProtPySegPreSegParticles(EMProtocol):
 
     def _findVesicleCenter(self, starFileInit, starFilePreseg1):
         ih = ImageHandler()
+        minSize = self.minXY.get()
+        minDepth = self.minDepth.get()
         outputTable = self._createTable()
         # Read preseg (vesicles not centered) table
         presegTable = Table()
@@ -242,12 +238,25 @@ class ProtPySegPreSegParticles(EMProtocol):
         for row, rowp in zip(initTable, presegTable):
             tomo = row.get(TOMOGRAM, NOT_FOUND)
             vesicle = row.get(VESICLE, NOT_FOUND)
-            vesicle_seg = rowp.get(SEGMENTATION, NOT_FOUND)
+            vesicleSeg = rowp.get(SEGMENTATION, NOT_FOUND)
             materialIndex = row.get(PYSEG_LABEL, NOT_FOUND)
             # Get the box dimensions, be sure that the Dimensions format is Dimensions: 239 x 1 x 298 x 298
             # ((N)Objects x (Z)Slices x (Y)Rows x (X)Columns)
             tomoX, tomoY, tomoZ, _ = ih.getDimensions(tomo)
-            x, y, z, _ = ih.getDimensions(vesicle_seg)
+            x, y, z, _ = ih.getDimensions(vesicleSeg)
+
+            if (x, y, z) == (tomoX, tomoY, tomoZ):  # Sometimes one of the segmented structures is the whole tomogram
+                # Remove the files generated in this intermediate step
+                self._removeVesicleFiles(vesicleSeg)
+                logger.info(f'==> Removed vesicle files {vesicleSeg} of size {x} x {y} x {z} px')
+                continue
+            if minSize > 0 or minDepth > 0:  # Apply the size filtering
+                # Only the regions with sizes larger than the minimun specified will be considered from this point
+                if x < minSize or y < minSize or z < minDepth:
+                    # Remove the files generated in this intermediate step
+                    self._removeVesicleFiles(vesicleSeg)
+                    logger.info(f'==> Removed vesicle files {vesicleSeg} of size {x} x {y} x {z} px')
+                    continue
 
             # Get the upper left corner of the vesicle in the original tomogram: _psSegOffX #7 _psSegOffY #8 _psSegOffZ
             # #9 from output star file of pre_tomos_seg.py that do not distinguish inner and outer densities
@@ -267,6 +276,9 @@ class ProtPySegPreSegParticles(EMProtocol):
         outputTable.write(self.getVesiclesCenteredStarFile())
 
     def getPresegOutputFile(self, inStar):
+        return self._getTmpPath(removeBaseExt(inStar) + PRE_STAR_SUFFIX)
+
+    def getPresegFinalOutputFile(self, inStar):
         return self._getExtraPath(removeBaseExt(inStar) + PRE_STAR_SUFFIX)
 
     def getVesiclesCenteredStarFile(self):
@@ -310,45 +322,21 @@ class ProtPySegPreSegParticles(EMProtocol):
         return value if value == -1 else value/10
 
     def _genOutputSetOfTomoMasks(self):
-        ih = ImageHandler()
-        minSize = self.minXY.get()
-        minDepth = self.minDepth.get()
         sRate = self._getSamplingRate()
-
+        finalPreSegStar = self.getPresegFinalOutputFile(self.getVesiclesCenteredStarFile())
         finalPreSegTable = Table()
-        finalPreSegTable.read(self.getPresegOutputFile(self.getVesiclesCenteredStarFile()))
-        finalStarFile = self._getExtraPath('presegResults.star')
-        finalResultTable = self._createOutputTable()
-
+        finalPreSegTable.read(finalPreSegStar)
         tomoMaskSet = SetOfTomoMasks.create(self._getPath(), template='tomomasks%s.sqlite', suffix='segVesicles')
         subTomoSet = SetOfSubTomograms.create(self._getPath(), template='subtomograms%s.sqlite', suffix='vesicles')
         inTomoMaskSet = self.inTomoMasks.get()
         tomoMaskSet.copyInfo(inTomoMaskSet)
-        tomoMaskSet._pysegPresegVesicleCStar = String(finalStarFile)
+        tomoMaskSet._pysegPresegVesicleCStar = String(finalPreSegStar)
         subTomoSet.copyInfo(inTomoMaskSet)
 
-        nSegmentationsRemoved = 0
         for row in finalPreSegTable:
             tomogram = row.get(TOMOGRAM)
             vesicle = row.get(VESICLE)
             vesicleSeg = row.get(SEGMENTATION)
-            tomoX, tomoY, tomoZ, _ = ih.getDimensions(tomogram)
-            x, y, z, _ = ih.getDimensions(vesicle)
-            if (x, y, z) == (tomoX, tomoY, tomoZ):  # Sometimes one of the segmented structures is the whole tomogram
-                # Remove the files generated in this intermediate step
-                self._removeVesicleFiles(vesicleSeg)
-                logger.info(f'==> Removed vesicle files {vesicleSeg} of size {x} x {y} x {z} px')
-                nSegmentationsRemoved += 1
-                continue
-            if minSize > 0 or minDepth > 0:  # Apply the size filtering
-                # Only the regions with sizes larger than the minimun specified will be considered from this point
-                if x < minSize or y < minSize or z < minDepth:
-                    # Remove the files generated in this intermediate step
-                    self._removeVesicleFiles(vesicleSeg)
-                    logger.info(f'==> Removed vesicle files {vesicleSeg} of size {x} x {y} x {z} px')
-                    nSegmentationsRemoved += 1
-                    continue
-
             classId = int(getVesicleIdFromSubtomoName(vesicle))
             # Populate the set of tomomasks
             tomoMask = TomoMask()
@@ -368,27 +356,13 @@ class ProtPySegPreSegParticles(EMProtocol):
             subtomo.setVolName(tomogram)
             subTomoSet.append(subtomo)
 
-            # Add the corresponding row to the final star file
-            finalResultTable._rows.append(row)
-
-        finalResultTable.write(finalStarFile)
-        if nSegmentationsRemoved > 0:
-            setattr(self, N_SEGS_REMOVED, Integer(nSegmentationsRemoved))
         return tomoMaskSet, subTomoSet
-
 
     def _getSamplingRate(self):
         return self.inTomoMasks.get().getFirstItem().getSamplingRate()
 
     def _getTomoFromRelations(self):
         return getObjFromRelation(self.inTomoMasks.get(), self, SetOfTomograms)
-
-    @staticmethod
-    def _getMatchingTomo2Vesicle(tomoBNameDict, vesicleBaseName):
-        for tomoBName in list(tomoBNameDict.keys()):
-            if tomoBName in vesicleBaseName:
-                return tomoBNameDict[tomoBName]
-        return None
 
     @staticmethod
     def _removeVesicleFiles(vesicle_seg):
