@@ -179,7 +179,7 @@ class ProtPySegGraphs(EMProtocol, ProtTomoBase, ProtTomoImportAcquisition):
     def _getPreSegStarFile(self):
         inputObj = self.inSegProt.get()
         if type(inputObj) is ProtPySegPreSegParticles:
-            return inputObj.getPresegOutputFile(inputObj.getVesiclesCenteredStarFile())
+            return inputObj.getPresegFinalOutputFile(inputObj.getVesiclesCenteredStarFile())
         else:
             # Set of TomoMasks
             return inputObj._pysegPresegVesicleCStar.get()

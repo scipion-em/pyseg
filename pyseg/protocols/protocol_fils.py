@@ -274,10 +274,6 @@ class ProtPySegFils(EMProtocol, ProtTomoBase, ProtTomoImportAcquisition):
         filsCmd += '--gRgEud %s ' % self.gRgEud.get()
         return filsCmd
 
-    def _getGraphsStarFile(self):
-        prot = self.inGraphsProt.get()
-        return prot._getExtraPath(removeBaseExt(prot._getPreSegStarFile()) + '_mb_graph.star')
-
     def _parseThModeSelection(self):
         if self.thMode.get() == TH_MODE_IN:
             return 'in'
