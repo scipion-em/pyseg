@@ -126,7 +126,8 @@ class Plugin(pwem.Plugin):
     @classmethod
     def _genCmdToInstallCFitsIO(cls, thirdPartyPath, pySegDir, controlFile):
         CFITSIO_BUILD_PATH = join(pySegDir, '%s_build' % CFITSIO)
-        installationCmd = 'tar zxf %s --directory=%s && ' % (join(thirdPartyPath, 'cfitsio_3.380.tar.gz'), pySegDir)
+        installationCmd = 'conda activate %s && ' % PYSEG_ENV_NAME
+        installationCmd += 'tar zxf %s --directory=%s && ' % (join(thirdPartyPath, 'cfitsio_3.380.tar.gz'), pySegDir)
         installationCmd += 'cd %s && ' % join(pySegDir, CFITSIO)
         installationCmd += 'mkdir %s && ' % CFITSIO_BUILD_PATH
         installationCmd += './configure --prefix=%s && ' % CFITSIO_BUILD_PATH
@@ -140,7 +141,8 @@ class Plugin(pwem.Plugin):
         # Remove old disperse included in pyseg distribution
         zipName = 'master.tar.gz'
         buildPath = join(pySegDir, f'{DISPERSE}-master')
-        installationCmd = 'cd %s && rm -rf disperse* && ' % pySegDir
+        installationCmd = 'conda activate %s && ' % PYSEG_ENV_NAME
+        installationCmd += 'cd %s && rm -rf disperse* && ' % pySegDir
         # Get the latest disperse
         installationCmd += 'wget https://github.com/thierry-sousbie/DisPerSE/archive/refs/heads/%s && ' % zipName
         installationCmd += 'tar zxf %s --directory=%s && ' % (zipName, pySegDir)
