@@ -389,12 +389,3 @@ class ProtPySegFils(EMProtocol, ProtTomoBase, ProtTomoImportAcquisition):
         #   1 --> [-inf, min] U [max, +inf]'], expected as any other thing
         return '+' if val == 0 else '-'
 
-    # def _getGraphsOutStarFiles(prot):
-    #     inStarList = glob.glob(prot.inGraphsProt.get()._getExtraPath(join(OUT_STARS_DIR, '*.star')))
-    #     outStarFiles = []
-    #     for inStarFile in inStarList:
-    #         outStarFile = prot._getExtraPath(IN_STARS_DIR, basename(inStarFile))
-    #         symlink(abspath(inStarFile), abspath(outStarFile))
-    #         outStarFiles.append(outStarFile)
-    #
-    #     return outStarFiles
