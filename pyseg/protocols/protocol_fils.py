@@ -25,22 +25,29 @@
 # *
 # **************************************************************************
 import glob
+import logging
 from collections import OrderedDict
 from os.path import basename, join, abspath
 import xml.etree.ElementTree as ET
 
+from emtable import Table
+
 from pwem.protocols import EMProtocol
 from pyseg.convert.convert import splitPysegStarFile
+from pyworkflow.object import String
 from pyworkflow.protocol import FloatParam, NumericListParam, EnumParam, PointerParam, LEVEL_ADVANCED, STEPS_PARALLEL
-from pyworkflow.utils import Message, copyFile, moveFile, makePath
+from pyworkflow.utils import Message, copyFile, moveFile, makePath, removeBaseExt
 from scipion.constants import PYTHON
 from tomo.protocols import ProtTomoBase
 from tomo.protocols.protocol_base import ProtTomoImportAcquisition
 
 from pyseg import Plugin
 from pyseg.constants import FILS_SCRIPT, FILS_SOURCES, FILS_TARGETS, MEMBRANE, \
-    MEMBRANE_OUTER_SURROUNDINGS, PRESEG_AREAS_LIST, IN_STARS_DIR, OUT_STARS_DIR, FILS_OUT, GRAPHS_OUT, FILS_FILES
-from pyseg.utils import encodePresegArea, createStarDirectories, genOutSplitStarFileName, getPrevPysegProtOutStarFiles
+    MEMBRANE_OUTER_SURROUNDINGS, PRESEG_AREAS_LIST, IN_STARS_DIR, OUT_STARS_DIR, FILS_OUT, GRAPHS_OUT, FILS_FILES, \
+    VESICLE
+from pyseg.utils import encodePresegArea, createStarDirectories, genOutSplitStarFileName
+
+logger = logging.getLogger(__name__)
 
 TH_MODE_IN = 0
 TH_MODE_OUT = 1
@@ -88,6 +95,7 @@ class ProtPySegFils(EMProtocol, ProtTomoBase, ProtTomoImportAcquisition):
         self._xmlTargets = None
         self._inStarDir = None
         self._outStarDir = None
+        self.failedVesicles = String()
 
     # -------------------------- DEFINE param functions ----------------------
     def _defineParams(self, form):
@@ -243,11 +251,19 @@ class ProtPySegFils(EMProtocol, ProtTomoBase, ProtTomoImportAcquisition):
         return inStarDict
 
     def pysegFils(self, starFile, outDir):
-        # Script called
-        Plugin.runPySeg(self, PYTHON, self._getFilsCommand(outDir, starFile))
-        # Fils returns the same star file name, so it will be renamed to avoid overwriting
-        moveFile(join(outDir, 'fil_mb_sources_to_no_mb_targets_net.star'),
-                 genOutSplitStarFileName(self._outStarDir, starFile.replace(GRAPHS_OUT, FILS_OUT)))
+        try:
+            # Script called
+            Plugin.runPySeg(self, PYTHON, self._getFilsCommand(outDir, starFile))
+            # Fils returns the same star file name, so it will be renamed to avoid overwriting
+            moveFile(join(outDir, 'fil_mb_sources_to_no_mb_targets_net.star'),
+                     genOutSplitStarFileName(self._outStarDir, starFile.replace(GRAPHS_OUT, FILS_OUT)))
+        except Exception as e:
+            inStarTable = Table()
+            inStarTable.read(starFile)
+            vesicleName = removeBaseExt(inStarTable[0].get(VESICLE, None))  # Files of only one line
+            self.failedVesicles.set(self.failedVesicles.get() + f',{vesicleName}')
+            self._store(self.failedVesicles)
+            logger.error(f'{e}')
 
     # --------------------------- INFO functions -----------------------------------
     def _summary(self):
@@ -256,6 +272,10 @@ class ProtPySegFils(EMProtocol, ProtTomoBase, ProtTomoImportAcquisition):
         if self.isFinished():
             summary.append('*Filaments calculation*:\n\t- Source = %s\n\t- Target = %s\n' %
                            (PRESEG_AREAS_LIST[int(self.segLabelS.get())], PRESEG_AREAS_LIST[int(self.segLabelT.get())]))
+
+            failedVesicles = self.failedVesicles.get()
+            if failedVesicles:
+                summary.append(f'Some vesicles failed in the filaments calculation: *{failedVesicles}*')
 
         return summary
 

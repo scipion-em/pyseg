@@ -102,7 +102,7 @@ class TestFromPresegToPicking(BaseTest):
                                               inputTomos=cls.inTomoSetBinned)
 
         cls.launchProtocol(protImportTomomasks)
-        tomoMaskSet = getattr(protImportTomomasks, 'outputTomoMasks', None)
+        tomoMaskSet = getattr(protImportTomomasks, protImportTomomasks._possibleOutputs.tomomasks.name, None)
         cls.assertIsNotNone(tomoMaskSet, 'No tomograms were genetated.')
 
         return tomoMaskSet
@@ -112,7 +112,6 @@ class TestFromPresegToPicking(BaseTest):
         print(magentaStr("\n==> Running preSeg:"))
         protPreseg = cls.newProtocol(
             ProtPySegPreSegParticles,
-            segmentationFrom=FROM_SCIPION,
             inTomoMasks=cls.inTomomaskSetBinned,
             spOffVoxels=22,
             sgMembThk=60,
