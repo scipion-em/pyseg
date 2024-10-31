@@ -95,7 +95,7 @@ class ProtPySegFils(EMProtocol, ProtTomoBase, ProtTomoImportAcquisition):
         self._xmlTargets = None
         self._inStarDir = None
         self._outStarDir = None
-        self.failedVesicles = String()
+        self.failedVesicles = String('')
 
     # -------------------------- DEFINE param functions ----------------------
     def _defineParams(self, form):
