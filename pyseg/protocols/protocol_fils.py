@@ -26,14 +26,13 @@
 # **************************************************************************
 import glob
 from collections import OrderedDict
-from os import mkdir
 from os.path import basename, join, abspath
 import xml.etree.ElementTree as ET
 
 from pwem.protocols import EMProtocol
 from pyseg.convert.convert import splitPysegStarFile
 from pyworkflow.protocol import FloatParam, NumericListParam, EnumParam, PointerParam, LEVEL_ADVANCED, STEPS_PARALLEL
-from pyworkflow.utils import Message, removeBaseExt, copyFile, moveFile
+from pyworkflow.utils import Message, copyFile, moveFile, makePath
 from scipion.constants import PYTHON
 from tomo.protocols import ProtTomoBase
 from tomo.protocols.protocol_base import ProtTomoImportAcquisition
@@ -235,10 +234,10 @@ class ProtPySegFils(EMProtocol, ProtTomoBase, ProtTomoImportAcquisition):
         # it is always generated with the same name, so there can be concurrency problems in parallelization
         inStarDict = {}
         filsResultsDir = self._getExtraPath(FILS_FILES)
-        mkdir(filsResultsDir)
+        makePath(filsResultsDir)
         for i, starFile in enumerate(inStarFiles):
             outDirName = join(filsResultsDir, 'outDir_%03d' % i)
-            mkdir(outDirName)
+            makePath(outDirName)
             inStarDict[starFile] = outDirName
 
         return inStarDict
