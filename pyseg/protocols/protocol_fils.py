@@ -261,7 +261,8 @@ class ProtPySegFils(EMProtocol, ProtTomoBase, ProtTomoImportAcquisition):
             inStarTable = Table()
             inStarTable.read(starFile)
             vesicleName = removeBaseExt(inStarTable[0].get(VESICLE, None))  # Files of only one line
-            self.failedVesicles.set(f'{self.failedVesicles.get()}, {vesicleName}')
+            prevMsg = self.failedVesicles.get() if self.failedVesicles.get() else ''
+            self.failedVesicles.set(prevMsg + f', {vesicleName}')
             self._store(self.failedVesicles)
             logger.error(f'{e}')
 

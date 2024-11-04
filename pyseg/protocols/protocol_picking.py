@@ -24,12 +24,17 @@
 # *  e-mail address 'scipion@cnb.csic.es'
 # *
 # **************************************************************************
+import logging
 from collections import OrderedDict
 from enum import Enum
 from os.path import basename, join
 import xml.etree.ElementTree as ET
+
+from emtable import Table
+
 from pwem.protocols import EMProtocol
 from pyseg.convert import readPysegCoordinates
+from pyworkflow.object import String
 from pyworkflow.protocol import FloatParam, EnumParam, PointerParam, IntParam, LEVEL_ADVANCED, STEPS_PARALLEL
 from pyworkflow.utils import Message, removeBaseExt, copyFile, moveFile
 from scipion.constants import PYTHON
@@ -38,12 +43,13 @@ from tomo.protocols import ProtTomoBase
 from tomo.protocols.protocol_base import ProtTomoImportAcquisition
 from pyseg import Plugin
 from pyseg.constants import FILS_SOURCES, FILS_TARGETS, PICKING_SCRIPT, PICKING_SLICES, PRESEG_AREAS_LIST, MEMBRANE, \
-    OUT_STARS_DIR, IN_STARS_DIR, FILS_OUT, PICKING_OUT
-
-# Fils slices xml fields
+    OUT_STARS_DIR, IN_STARS_DIR, FILS_OUT, PICKING_OUT, VESICLE
 from pyseg.utils import encodePresegArea, getPrevPysegProtOutStarFiles, createStarDirectories
 from tomo.utils import getObjFromRelation
 
+logger = logging.getLogger(__name__)
+
+# Fils slices xml fields
 SIDE = 'side'
 CONT = 'cont'
 
@@ -75,6 +81,7 @@ class ProtPySegPicking(EMProtocol, ProtTomoBase, ProtTomoImportAcquisition):
         self._outStarDir = None
         self._xmlSlices = None
         self._outStarFilesList = []
+        self.failedVesicles = String('')
 
     # -------------------------- DEFINE param functions ----------------------
     def _defineParams(self, form):
@@ -171,13 +178,22 @@ class ProtPySegPicking(EMProtocol, ProtTomoBase, ProtTomoImportAcquisition):
                                             self._getExtraPath(IN_STARS_DIR))
 
     def pysegPicking(self, starFile):
-        # Script called
-        Plugin.runPySeg(self, PYTHON, self._getPickingCommand(starFile))
-        # Move output files to the corresponding directory
-        outFile = self._getExtraPath(removeBaseExt(starFile) + '_parts.star')
-        newFileName = join(self._outStarDir, basename(outFile).replace(FILS_OUT, PICKING_OUT))
-        self._outStarFilesList.append(newFileName)
-        moveFile(outFile, newFileName)
+        try:
+            # Script called
+            Plugin.runPySeg(self, PYTHON, self._getPickingCommand(starFile))
+            # Move output files to the corresponding directory
+            outFile = self._getExtraPath(removeBaseExt(starFile) + '_parts.star')
+            newFileName = join(self._outStarDir, basename(outFile).replace(FILS_OUT, PICKING_OUT))
+            self._outStarFilesList.append(newFileName)
+            moveFile(outFile, newFileName)
+        except Exception as e:
+            inStarTable = Table()
+            inStarTable.read(starFile)
+            vesicleName = removeBaseExt(inStarTable[0].get(VESICLE, None))  # Files of only one line
+            prevMsg = self.failedVesicles.get() if self.failedVesicles.get() else ''
+            self.failedVesicles.set(prevMsg + f', {vesicleName}')
+            self._store(self.failedVesicles)
+            logger.error(f'{e}')
 
     def createOutputStep(self):
         suffix = self._getOutputSuffix(SetOfCoordinates3D)
