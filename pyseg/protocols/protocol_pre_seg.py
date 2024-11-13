@@ -24,19 +24,15 @@
 # *  e-mail address 'scipion@cnb.csic.es'
 # *
 # **************************************************************************
-import glob
 import logging
 import os
 from enum import Enum
 from os.path import abspath, exists
-
 import mrcfile
-
 from pwem.convert.headers import fixVolume
 from pwem.emlib.image import ImageHandler
 from pwem.protocols import EMProtocol
 from pyseg.convert.convert import getVesicleIdFromSubtomoName
-
 from pyworkflow.object import String
 from pyworkflow.protocol import IntParam, FloatParam, GT, LEVEL_ADVANCED, PointerParam
 from pyworkflow.utils import Message, removeBaseExt, removeExt
@@ -112,16 +108,17 @@ class ProtPySegPreSegParticles(EMProtocol):
                             'desired to be included in the analysis.')
         line = group.addLine('Artifact removal', help='When the segmentations do not come from the a manual annotation '
                                                       'tool, like the Membrane Annotator from scipion-em-tomosegmemtv, '
-                                                      'there may be spurious structures that should be removed.')
+                                                      'there may be spurious structures that should be removed.\n'
+                                                      'Minimum box size XY, in pixels, allowed in height and width. Value '
+                                                      '-1 ignore the size filtering.\n'
+                                                      'Minimum box size Z, in pixels, allowed. Value -1 ignore the depth '
+                                                      'filtering.')
         line.addParam('minXY', IntParam,
-                      label='Min size (px)',
-                      default=-1,
-                      help='Minimum length, in pixels, allowed in height and width. Value -1 ignore the size '
-                           'filtering.')
+                      label='Min box size XY (px)',
+                      default=-1)
         line.addParam('minDepth', IntParam,
-                      label='Min depth (px)',
-                      default=-1,
-                      help='Minimum depth, in pixels, allowed. Value -1 ignore the depth filtering.')
+                      label='Min box size Z (px)',
+                      default=-1)
 
     def _insertAllSteps(self):
         self._starFile = self._getExtraPath('inStar.star')
