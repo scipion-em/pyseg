@@ -82,7 +82,7 @@ class PysegStarReader(Reader):
             subtomo.setVolName(managePath4Sqlite(volname))
             subtomo.setTransform(transform)
             subtomo.setAcquisition(TomoAcquisition())
-            subtomo.setClassId(row.get('rlnClassNumber', 0))
+            subtomo.setClassId(row.get('rlnClassNumber', 0)+1)
             subtomo.setSamplingRate(samplingRate)
 
             tiltPrior = row.get(TILT_PRIOR, 0)

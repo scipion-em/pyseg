@@ -392,7 +392,7 @@ class ProtPySegPlaneAlignClassification(EMProtocol, ProtTomoBase):
 
     @staticmethod
     def _updateParticle(item, row):
-        item.setClassId(int(row.rlnClassNumber))
+        item.setClassId(int(row.rlnClassNumber)+1)  # pyseg classes are 0-indexed
 
     def _updateClass(self, item):
         classId = item.getObjId()
@@ -402,6 +402,7 @@ class ProtPySegPlaneAlignClassification(EMProtocol, ProtTomoBase):
 
     def _getReferenceImage(self, classId):
         # Search in exemplars directory. If file does not exist, search in averages directory
+        classId -= 1  # 0-based
         representativesLocation = None
         exemplarssLocation = glob.glob(join(self._outDir, '*_exemplars'))
         averagesLocation = glob.glob(join(self._outDir, '*_averages'))
