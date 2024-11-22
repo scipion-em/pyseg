@@ -102,7 +102,7 @@ class TestFromPresegToPicking(BaseTest):
                                               inputTomos=cls.inTomoSetBinned)
 
         cls.launchProtocol(protImportTomomasks)
-        tomoMaskSet = getattr(protImportTomomasks, 'outputTomoMasks', None)
+        tomoMaskSet = getattr(protImportTomomasks, 'tomomasks', None)
         cls.assertIsNotNone(tomoMaskSet, 'No tomograms were genetated.')
 
         return tomoMaskSet
