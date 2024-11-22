@@ -1,3 +1,5 @@
+v3.1.5:
+  Fix output classId: must be 1-based indices
 v3.1.4:
   Users:
    - Steps more precise in GPU usage. Improved execution
